@@ -6,7 +6,7 @@ TAS is a small Windows program that watches your CPU and GPU temperatures and sh
 
 Get `TAS.exe` from the releases page:
 
-**https://github.com/OWNER/TAS/releases/latest** *(replace `OWNER` with the GitHub account that hosts this repository)*
+**https://github.com/mistycodey/TAS/releases/latest**
 
 It's a single file. There's nothing to install, and you don't need .NET. The same file is in the `release` folder of this project.
 
