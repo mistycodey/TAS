@@ -35,6 +35,11 @@ public sealed class AlertRule
     /// </summary>
     public float Hysteresis { get; set; } = 3;
 
+    /// <summary>
+    /// Optional images (http/https addresses) for the TAS pop-up when this alert fires. One is picked at random each time.
+    /// </summary>
+    public List<string> ImageUrls { get; set; } = new();
+
     public SensorReading? Find(DeviceSnapshot? device)
     {
         if (device is null)

@@ -24,6 +24,15 @@ internal sealed class RuleEditorForm : Form
         MaximumSize = new Size(Ui.Scale(380), 0),
         Margin = new Padding(Ui.Scale(3), 0, 0, Ui.Scale(6)),
     };
+    private readonly TextBox _image = new()
+    {
+        Multiline = true,
+        AcceptsReturn = true,
+        WordWrap = false,
+        ScrollBars = ScrollBars.Both,
+        Width = Ui.Scale(280),
+        Height = Ui.Scale(68),
+    };
     private readonly Label _limitUnit = Ui.Caption("");
     private readonly Label _hysteresisUnit = Ui.Caption("");
 
@@ -45,6 +54,7 @@ internal sealed class RuleEditorForm : Form
         _device.Items.AddRange(["CPU", "GPU"]);
         _comparison.Items.AddRange(["Goes above (at or over the limit)", "Drops below (at or under the limit)"]);
 
+        _image.Text = string.Join(Environment.NewLine, rule.ImageUrls);
         _device.SelectedIndex = (int)rule.Device;
         _comparison.SelectedIndex = (int)rule.Comparison;
         FillSensors(rule.SensorName, rule.SensorType);
@@ -62,6 +72,18 @@ internal sealed class RuleEditorForm : Form
         AddRow(table, "Alert when it", _comparison, null);
         AddRow(table, "Limit", _limit, _limitUnit);
         AddRow(table, "Alert again after recovering by", _hysteresis, _hysteresisUnit);
+        AddRow(table, "Images (optional)", _image, null);
+        var imageNote = new Label
+        {
+            AutoSize = true,
+            ForeColor = SystemColors.GrayText,
+            MaximumSize = new Size(Ui.Scale(380), 0),
+            Margin = new Padding(Ui.Scale(3), 0, 0, Ui.Scale(6)),
+            Text = "Picture web addresses (http:// or https://), one per line; any common format works. Each alert shows one at random, in the TAS pop-up instead of the Windows notification.",
+        };
+        table.Controls.Add(new Label { AutoSize = true });
+        table.Controls.Add(imageNote);
+        table.SetColumnSpan(imageNote, 2);
 
         var note = new Label
         {
@@ -147,6 +169,20 @@ internal sealed class RuleEditorForm : Form
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
+
+        List<string> imageUrls = ImageCache.ParseList(_image.Text);
+        string? badUrl = imageUrls.FirstOrDefault(url => !ImageCache.IsValidUrl(url, out _));
+        if (badUrl is not null)
+        {
+            MessageBox.Show(this, $"Each image address must start with http:// or https://, or be left out:\n\n{badUrl}", "TAS",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        // Download now so the images are ready before the alert first fires.
+        _rule.ImageUrls = imageUrls;
+        foreach (string url in imageUrls)
+            _ = ImageCache.EnsureAsync(url);
 
         bool temperature = sensor.Type == "Temperature";
         _rule.Device = (AlertDevice)_device.SelectedIndex;

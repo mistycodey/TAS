@@ -31,13 +31,20 @@ internal sealed class OverlayToast : Form
     private readonly System.Windows.Forms.Timer _life;
     private readonly System.Windows.Forms.Timer _keepOnTop = new() { Interval = 500 };
     private readonly Screen _screen;
+    private readonly Image? _image;
+    private readonly Rectangle _imageBounds;
+    private readonly int _textLeft;
+    private readonly int _textTop;
+    private readonly int _textWidth;
+    private readonly int _titleHeight;
 
-    private OverlayToast(string title, string text, Color accent, int seconds, Screen screen)
+    private OverlayToast(string title, string text, Color accent, int seconds, Screen screen, Image? image, int imageSize)
     {
         _title = title;
         _text = text;
         _accent = accent;
         _screen = screen;
+        _image = image;
 
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.Manual;
@@ -47,12 +54,45 @@ internal sealed class OverlayToast : Form
         BackColor = Color.FromArgb(32, 32, 36);
         Opacity = 0.96;
 
-        int maxTextWidth = Ui.Scale(360);
+        // Title and message sit above the picture so the alert is still readable when the picture is large.
+        int padding = Ui.Scale(12);
+        int left = Ui.Scale(6 + 14);
+        int gap = Ui.Scale(10);
+        int chrome = padding * 2; // top and bottom padding; image gap added only when there is a picture
+
+        Size shown = Size.Empty;
+        if (image is not null && image.Width > 0 && image.Height > 0)
+        {
+            int box = Math.Min(Ui.Scale(imageSize), (int)Math.Min(screen.Bounds.Height * 0.8, screen.Bounds.Width * 0.5));
+            double scale = Math.Min(8.0, Math.Min((double)box / image.Width, (double)box / image.Height));
+            shown = new Size(Math.Max(1, (int)(image.Width * scale)), Math.Max(1, (int)(image.Height * scale)));
+        }
+
+        int maxTextWidth = Math.Max(Ui.Scale(360), shown.Width);
         Size titleSize = TextRenderer.MeasureText(title, _titleFont, new Size(maxTextWidth, int.MaxValue), TextFormatFlags.WordBreak);
         Size textSize = TextRenderer.MeasureText(text, _textFont, new Size(maxTextWidth, int.MaxValue), TextFormatFlags.WordBreak);
-        int width = Math.Max(titleSize.Width, textSize.Width) + Ui.Scale(14 + 16 + 14);
-        int height = titleSize.Height + textSize.Height + Ui.Scale(12 + 4 + 12);
-        ClientSize = new Size(width, height);
+        _textWidth = Math.Max(Math.Max(titleSize.Width, textSize.Width), shown.Width);
+        _titleHeight = titleSize.Height;
+        int textBlock = titleSize.Height + Ui.Scale(4) + textSize.Height;
+
+        // Shrink the picture if the whole toast wouldn't fit on the screen with the message above it.
+        if (shown != Size.Empty)
+        {
+            int maxImageHeight = screen.Bounds.Height - Ui.Scale(32) - chrome - gap - textBlock;
+            if (shown.Height > maxImageHeight && maxImageHeight > Ui.Scale(80))
+            {
+                double shrink = (double)maxImageHeight / shown.Height;
+                shown = new Size(Math.Max(1, (int)(shown.Width * shrink)), Math.Max(1, (int)(shown.Height * shrink)));
+            }
+        }
+
+        _textLeft = left;
+        _textTop = padding;
+        if (shown != Size.Empty)
+            _imageBounds = new Rectangle(left + (_textWidth - shown.Width) / 2, padding + textBlock + gap, shown.Width, shown.Height);
+
+        int height = padding + textBlock + (shown == Size.Empty ? 0 : gap + shown.Height) + padding;
+        ClientSize = new Size(left + _textWidth + Ui.Scale(16), height);
 
         _life = new System.Windows.Forms.Timer { Interval = Math.Max(1, seconds) * 1000 };
         _life.Tick += (_, _) => Close();
@@ -62,10 +102,10 @@ internal sealed class OverlayToast : Form
     /// <summary>
     /// Shows an alert in the top-right corner of the screen the foreground window (e.g. the game) is on.
     /// </summary>
-    public static void Display(string title, string text, Color accent, int seconds = 10)
+    public static void Display(string title, string text, Color accent, int seconds = 10, Image? image = null, int imageSize = 720)
     {
         Screen screen = Screen.FromHandle(GetForegroundWindow());
-        var toast = new OverlayToast(title, text, accent, seconds, screen);
+        var toast = new OverlayToast(title, text, accent, seconds, screen, image, imageSize);
         toast.FormClosed += (_, _) =>
         {
             Active.Remove(toast);
@@ -127,13 +167,15 @@ internal sealed class OverlayToast : Form
         using (var bar = new SolidBrush(_accent))
             e.Graphics.FillRectangle(bar, 0, 0, Ui.Scale(6), Height);
 
-        int left = Ui.Scale(6 + 14);
-        int maxTextWidth = Width - left - Ui.Scale(14);
-        var titleBounds = new Rectangle(left, Ui.Scale(12), maxTextWidth, Height);
-        Size titleSize = TextRenderer.MeasureText(_title, _titleFont, new Size(maxTextWidth, int.MaxValue), TextFormatFlags.WordBreak);
-        TextRenderer.DrawText(e.Graphics, _title, _titleFont, titleBounds, Color.White, TextFormatFlags.WordBreak | TextFormatFlags.Left | TextFormatFlags.Top);
-        var textBounds = new Rectangle(left, Ui.Scale(12 + 4) + titleSize.Height, maxTextWidth, Height);
-        TextRenderer.DrawText(e.Graphics, _text, _textFont, textBounds, Color.Gainsboro, TextFormatFlags.WordBreak | TextFormatFlags.Left | TextFormatFlags.Top);
+        if (_image is not null && !_imageBounds.IsEmpty)
+        {
+            e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            e.Graphics.DrawImage(_image, _imageBounds);
+        }
+
+        const TextFormatFlags flags = TextFormatFlags.WordBreak | TextFormatFlags.Left | TextFormatFlags.Top;
+        TextRenderer.DrawText(e.Graphics, _title, _titleFont, new Rectangle(_textLeft, _textTop, _textWidth, Height), Color.White, flags);
+        TextRenderer.DrawText(e.Graphics, _text, _textFont, new Rectangle(_textLeft, _textTop + _titleHeight + Ui.Scale(4), _textWidth, Height), Color.Gainsboro, flags);
     }
 
     protected override void Dispose(bool disposing)
@@ -144,6 +186,7 @@ internal sealed class OverlayToast : Form
             _keepOnTop.Dispose();
             _titleFont.Dispose();
             _textFont.Dispose();
+            _image?.Dispose();
         }
 
         base.Dispose(disposing);

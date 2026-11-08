@@ -25,6 +25,13 @@ public sealed class MainForm : Form
     private readonly CheckBox _fahrenheit = new() { Text = "Show temperatures in °F", AutoSize = true };
     private readonly CheckBox _csv = new() { Text = "Log readings to a CSV file", AutoSize = true };
     private readonly Button _rules = new() { Text = "Manage custom alerts...", AutoSize = true };
+    private readonly TextBox _cpuImage = ImageBox();
+    private readonly TextBox _gpuImage = ImageBox();
+    private readonly Label _cpuImageStatus = ImageStatus();
+    private readonly Label _gpuImageStatus = ImageStatus();
+    private readonly NumericUpDown _imageSize = Ui.Number(64, 1600);
+    private readonly Button _cpuImageTest = new() { Text = "Test", AutoSize = true };
+    private readonly Button _gpuImageTest = new() { Text = "Test", AutoSize = true };
     private readonly Button _viewAvailable = new() { Text = "View Available Alerts", AutoSize = true };
     private readonly Label _rulesSummary = new() { AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(Ui.Scale(3), Ui.Scale(8), 0, 0) };
     private readonly ToolTip _tips = new();
@@ -50,6 +57,11 @@ public sealed class MainForm : Form
     public event Action? GpuThresholdChanged;
     public event Action? CustomAlertsChanged;
     public event Action? DisplayOptionsChanged;
+
+    /// <summary>
+    /// Raised with the alert's name and its image addresses when the user clicks a Test button next to an image box.
+    /// </summary>
+    public event Action<string, IReadOnlyList<string>>? ImageTestRequested;
 
     public string? LastAlert { get; set; }
 
@@ -81,6 +93,11 @@ public sealed class MainForm : Form
         _startup.Checked = false;
         _fahrenheit.Checked = settings.UseFahrenheit;
         _overlay.Checked = settings.ShowOverlayAlerts;
+        Ui.SetClamped(_imageSize, settings.AlertImageSize);
+        _cpuImage.Text = string.Join(Environment.NewLine, settings.CpuImageUrls);
+        _gpuImage.Text = string.Join(Environment.NewLine, settings.GpuImageUrls);
+        _cpuImageStatus.Text = ReadyText(settings.CpuImageUrls);
+        _gpuImageStatus.Text = ReadyText(settings.GpuImageUrls);
         _csv.Checked = settings.LogReadingsToCsv;
         UpdateRulesSummary();
         _tips.SetToolTip(_startup, "Adds a Windows scheduled task that starts TAS in the tray at sign-in without a UAC prompt.");
@@ -162,6 +179,9 @@ public sealed class MainForm : Form
         _overlay.CheckedChanged += (_, _) => Apply(() => _settings.ShowOverlayAlerts = _overlay.Checked);
         _rules.Click += (_, _) => OpenRules();
         _viewAvailable.Click += (_, _) => OpenAvailableAlerts();
+        _imageSize.ValueChanged += (_, _) => Apply(() => _settings.AlertImageSize = (int)_imageSize.Value);
+        WireImageBox(_cpuImage, _cpuImageStatus, _cpuImageTest, "CPU temperature", urls => _settings.CpuImageUrls = urls);
+        WireImageBox(_gpuImage, _gpuImageStatus, _gpuImageTest, "GPU temperature", urls => _settings.GpuImageUrls = urls);
 
         _setup.InstallPawnIoRequested += () => InstallPawnIoRequested?.Invoke();
         _setup.TestAlertRequested += () => TestAlertRequested?.Invoke();
@@ -223,6 +243,16 @@ public sealed class MainForm : Form
         sound.SetColumnSpan(fileRow, 2);
         AddNote(sound, "This plays as well as the Windows notification sound.");
 
+        var images = Grid();
+        AddRow(images, "CPU temperature alert", _cpuImage, ImageTail(_cpuImageTest, _cpuImageStatus));
+        AddRow(images, "GPU temperature alert", _gpuImage, ImageTail(_gpuImageTest, _gpuImageStatus));
+        AddRow(images, "Image size", _imageSize, Ui.Caption("pixels, longest side (bigger = larger picture in the alert)"));
+        AddNote(images, "Optional. Paste the web address of a picture (starting http:// or https://) to show it in the alert. The address doesn't need a file extension, and most common formats work (PNG, JPG, WebP, GIF). "
+                        + "Put one address per line to use several; each alert then shows one of them picked at random (up to "
+                        + $"{ImageCache.MaxImagesPerAlert}). "
+                        + "An alert with an image appears in the TAS pop-up instead of the Windows notification, so it needs the pop-up option on the "
+                        + "Settings tab. Leave blank for no image. Custom alerts have their own image addresses in the alert editor.");
+
         var custom = Grid();
         AddNote(custom, "Get an alert for any other reading, such as GPU hot spot, memory temperature, load, or a fan stopping.");
         var customRow = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty };
@@ -233,7 +263,7 @@ public sealed class MainForm : Form
         custom.SetColumnSpan(customRow, 3);
 
         TabPage page = NewPage("Alerts");
-        page.Controls.Add(Stack(Box("When to alert", timing), Box("Alert sound", sound), Box("Custom alerts", custom)));
+        page.Controls.Add(Stack(Box("When to alert", timing), Box("Alert sound", sound), Box("Alert images", images), Box("Custom alerts", custom)));
         return page;
     }
 
@@ -253,6 +283,93 @@ public sealed class MainForm : Form
         TabPage page = NewPage("Settings");
         page.Controls.Add(Stack(Box("General", general), Box("Data", data)));
         return page;
+    }
+
+    private static TextBox ImageBox() => new()
+    {
+        Multiline = true,
+        AcceptsReturn = true,
+        WordWrap = false,
+        ScrollBars = ScrollBars.Both,
+        Width = Ui.Scale(340),
+        Height = Ui.Scale(68),
+        PlaceholderText = "One image address per line, e.g.\r\nhttps://example.com/picture.png",
+    };
+
+    private static string ReadyText(IReadOnlyList<string> urls) =>
+        urls.Count > 0 && urls.All(ImageCache.IsCached) ? ReadyMessage(urls.Count) : "";
+
+    private static string ReadyMessage(int count) => count == 1 ? "1 image ready" : $"{count} images ready";
+
+    private static Label ImageStatus() => new()
+    {
+        AutoSize = true,
+        ForeColor = SystemColors.GrayText,
+        MaximumSize = new Size(Ui.Scale(260), 0),
+        Margin = new Padding(Ui.Scale(6), Ui.Scale(6), 0, 0),
+    };
+
+    private static FlowLayoutPanel ImageTail(Button test, Label status)
+    {
+        var tail = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
+        tail.Controls.Add(test);
+        tail.Controls.Add(status);
+        return tail;
+    }
+
+    // Enter adds a new line in these boxes, so the list is saved when the box loses focus (or Test is clicked).
+    private void WireImageBox(TextBox box, Label status, Button test, string alertName, Action<List<string>> store)
+    {
+        box.Tag = string.Join("\n", ImageCache.ParseList(box.Text));
+        box.Leave += async (_, _) => await ApplyImagesAsync(box, status, store);
+        test.Click += async (_, _) =>
+        {
+            await ApplyImagesAsync(box, status, store);
+            List<string> urls = ImageCache.ParseList(box.Text);
+            if (urls.Count == 0)
+                status.Text = "Enter an image address first";
+            else if (urls.Any(ImageCache.IsCached))
+                ImageTestRequested?.Invoke(alertName, urls);
+        };
+    }
+
+    // Saves a changed list and downloads the images, so they're ready (and checked) before the first alert needs them.
+    private async Task ApplyImagesAsync(TextBox box, Label status, Action<List<string>> store)
+    {
+        List<string> urls = ImageCache.ParseList(box.Text);
+        string key = string.Join("\n", urls);
+        bool changed = key != (string)box.Tag!;
+        if (!changed && (urls.Count == 0 || urls.All(ImageCache.IsCached)))
+            return;
+
+        box.Tag = key;
+        if (changed)
+            Apply(() => store(urls));
+        if (urls.Count == 0)
+        {
+            status.Text = "";
+            return;
+        }
+
+        status.ForeColor = SystemColors.GrayText;
+        status.Text = urls.Count == 1 ? "Downloading..." : $"Downloading {urls.Count} images...";
+        string?[] errors = await Task.WhenAll(urls.Select(url => ImageCache.EnsureAsync(url)));
+        if (string.Join("\n", ImageCache.ParseList(box.Text)) != key)
+            return; // edited again while downloading; that edit reports its own result
+
+        int ready = errors.Count(error => error is null);
+        if (ready == urls.Count)
+        {
+            status.ForeColor = Color.SeaGreen;
+            status.Text = ReadyMessage(ready);
+            return;
+        }
+
+        int bad = Array.FindIndex(errors, error => error is not null);
+        status.ForeColor = Color.Firebrick;
+        status.Text = urls.Count == 1
+            ? $"Couldn't use it: {errors[bad]}"
+            : $"{ready} of {urls.Count} ready. Image {bad + 1}: {errors[bad]}";
     }
 
     private static TableLayoutPanel Grid() => new()

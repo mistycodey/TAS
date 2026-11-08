@@ -64,7 +64,8 @@ Controls when and how TAS alerts you.
 
 - **When to alert**: how often the sensors are checked, how far a temperature must cool before TAS alerts again, and how often it reminds you while it stays too hot (0 means alert once).
 - **Alert sound**: choose no extra sound, a warning chime, a critical alarm, or your own `.wav` file. **Test sound** plays it.
-- **Custom alerts**: alerts on readings other than the CPU and GPU temperature limits.
+- **Alert images**: optionally show a picture in an alert. Paste the web address (`http://` or `https://`) of a picture into the box for the CPU temperature alert and/or the GPU temperature alert. Put **one address per line** to use several: each alert then shows one of them, picked at random (up to 20 per alert). TAS downloads each image once and keeps a copy, and shows a status next to the box (for example **3 images ready**, or which image couldn't be used and why). The list is saved when you click out of the box. **Test** shows a sample alert with a random image from the list. An alert with an image appears in the TAS pop-up instead of the Windows notification (Windows notifications can't show pictures), so it needs **Show a TAS pop-up when Windows hides notifications** left ticked on the Settings tab. If the image can't be loaded, the alert is shown normally. The address doesn't need a file extension: TAS reads whatever the server sends (PNG, JPG, WebP, GIF and most other common formats), shrinks it if it's large and keeps it as a PNG. Animated images show their first frame only.
+- **Custom alerts**: alerts on readings other than the CPU and GPU temperature limits. Each custom alert has its own optional list of **Images** in the alert editor, also one address per line.
   - **Manage custom alerts...** lists your alerts so you can add, edit, switch off or remove them.
   - **View Available Alerts** opens a window listing every sensor your hardware reports, grouped by device and type, with its current value and a one-line explanation of what it monitors. **Double-click any item to set up an alert for it**, or select it and click **Create alert for selected...**. TAS suggests a starting limit that you can change.
 
@@ -109,6 +110,7 @@ Checks that TAS can do its job. A warning sign on the tab means something needs 
 | Settings | `%APPDATA%\TAS\settings.json` |
 | Alert log | `%APPDATA%\TAS\tas.log` |
 | Readings (only if CSV logging is on) | `%APPDATA%\TAS\readings.csv` |
+| Downloaded alert images | `%APPDATA%\TAS\images\` |
 
 ## Building from source
 

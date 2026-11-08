@@ -39,6 +39,21 @@ public sealed class Settings
     public bool ShowOverlayAlerts { get; set; } = true;
 
     /// <summary>
+    /// Longest side, in pixels at 100% display scaling, of the picture in an alert pop-up.
+    /// </summary>
+    public int AlertImageSize { get; set; } = 720;
+
+    /// <summary>
+    /// Optional images (http/https addresses) for CPU temperature alerts. Each alert shows one of them, picked at random.
+    /// </summary>
+    public List<string> CpuImageUrls { get; set; } = new();
+
+    /// <summary>
+    /// Optional images (http/https addresses) for GPU temperature alerts. Each alert shows one of them, picked at random.
+    /// </summary>
+    public List<string> GpuImageUrls { get; set; } = new();
+
+    /// <summary>
     /// User-defined alerts on other readings (hot spot, load, fan speed, ...), in addition to the CPU/GPU temperature limits.
     /// </summary>
     public List<AlertRule> CustomAlerts { get; set; } = new();

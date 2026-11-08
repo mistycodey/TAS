@@ -62,6 +62,8 @@ public sealed class TrayApp : ApplicationContext
         _window.GpuThresholdChanged += _gpuAlert.Reset;
         _window.CustomAlertsChanged += _ruleAlerts.Clear;
         _window.DisplayOptionsChanged += RefreshDisplay;
+        _window.ImageTestRequested += (label, urls) =>
+            ShowToast("TAS test alert", $"This is how your {label} alert will look.", ToolTipIcon.Warning, forceOverlay: true, imageUrls: urls);
         _window.TestAlertRequested += () =>
         {
             ShowToast("TAS test alert", "If you can see this, temperature alerts will appear here.", ToolTipIcon.Warning, forceOverlay: true);
@@ -74,6 +76,18 @@ public sealed class TrayApp : ApplicationContext
             OpenWindow();
 
         _ = RunAsync(_cts.Token);
+        WarmImageCache();
+    }
+
+    // Downloads any alert image that isn't cached yet, so the first alert already has its picture.
+    private void WarmImageCache()
+    {
+        IEnumerable<string> urls = _settings.CpuImageUrls
+            .Concat(_settings.GpuImageUrls)
+            .Concat(_settings.CustomAlerts.SelectMany(rule => rule.ImageUrls))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (string url in urls)
+            _ = ImageCache.EnsureAsync(url);
     }
 
     private async Task RunAsync(CancellationToken token)
@@ -169,14 +183,14 @@ public sealed class TrayApp : ApplicationContext
         {
             _window.LastAlert = $"CPU {Ui.Temp(cpuTemp)} at {DateTime.Now:T}";
             Alert("CPU temperature high",
-                $"{s.Cpu!.Name} is at {Ui.Temp(cpuTemp)} (alert at {Ui.Temp(_settings.CpuThresholdC)})");
+                $"{s.Cpu!.Name} is at {Ui.Temp(cpuTemp)} (alert at {Ui.Temp(_settings.CpuThresholdC)})", _settings.CpuImageUrls);
         }
 
         if (_gpuAlert.ShouldAlert(gpuTemp, _settings.GpuThresholdC, _settings.HysteresisC, _settings.RepeatAlertMinutes))
         {
             _window.LastAlert = $"GPU {Ui.Temp(gpuTemp)} at {DateTime.Now:T}";
             Alert("GPU temperature high",
-                $"{s.Gpu!.Name} is at {Ui.Temp(gpuTemp)} (alert at {Ui.Temp(_settings.GpuThresholdC)})");
+                $"{s.Gpu!.Name} is at {Ui.Temp(gpuTemp)} (alert at {Ui.Temp(_settings.GpuThresholdC)})", _settings.GpuImageUrls);
         }
     }
 
@@ -203,13 +217,14 @@ public sealed class TrayApp : ApplicationContext
             string shown = SensorInfo.Format(rule.SensorType, reading!.Value.Value);
             _window.LastAlert = $"{rule.DeviceName} {rule.SensorName} {shown} at {DateTime.Now:T}";
             Alert($"{rule.DeviceName} {rule.SensorName} alert",
-                $"{device!.Name}: {rule.SensorName} is {shown} ({(below ? "below" : "above")} {SensorInfo.Format(rule.SensorType, rule.Limit)})");
+                $"{device!.Name}: {rule.SensorName} is {shown} ({(below ? "below" : "above")} {SensorInfo.Format(rule.SensorType, rule.Limit)})",
+                rule.ImageUrls);
         }
     }
 
-    private void Alert(string title, string text)
+    private void Alert(string title, string text, IReadOnlyList<string>? imageUrls = null)
     {
-        ShowToast(title, text, ToolTipIcon.Warning);
+        ShowToast(title, text, ToolTipIcon.Warning, imageUrls: imageUrls);
         AlertSounds.Play(_settings);
     }
 
@@ -295,24 +310,39 @@ public sealed class TrayApp : ApplicationContext
         _window.Activate();
     }
 
-    // The Windows notification is always sent (it also lands in the notification centre). TAS's own pop-up is only added
-    // when Windows is holding notifications back, e.g. during a game, so normally there's just one alert on screen.
-    private void ShowToast(string title, string text, ToolTipIcon icon, bool forceOverlay = false)
+    // Normally the Windows notification is sent (it also lands in the notification centre), and TAS's own pop-up is only
+    // added when Windows is holding notifications back, e.g. during a game, so there's just one alert on screen.
+    // An alert with an image can only be shown in TAS's pop-up, so then the pop-up is shown instead of the Windows one.
+    // If the image hasn't downloaded (yet), the alert falls back to the normal behaviour.
+    private void ShowToast(string title, string text, ToolTipIcon icon, bool forceOverlay = false, IReadOnlyList<string>? imageUrls = null)
     {
         Log.Write($"Notification: {title} - {text}");
-        _tray.ShowBalloonTip(10_000, title, text, icon);
 
-        if (_settings.ShowOverlayAlerts && (forceOverlay || SetupChecks.WindowsHoldsToasts()))
+        // One of the alert's images, picked at random each time.
+        Image? image = _settings.ShowOverlayAlerts ? ImageCache.TryLoadRandom(imageUrls) : null;
+        bool showOverlay = _settings.ShowOverlayAlerts && (forceOverlay || image is not null || SetupChecks.WindowsHoldsToasts());
+
+        bool balloonShown = image is null || !showOverlay;
+        if (balloonShown)
+            _tray.ShowBalloonTip(10_000, title, text, icon);
+
+        if (!showOverlay)
         {
-            Color accent = icon == ToolTipIcon.Error ? Color.Firebrick : Color.OrangeRed;
-            try
-            {
-                OverlayToast.Display(title, text, accent);
-            }
-            catch (Exception ex)
-            {
-                Log.Write($"Overlay alert failed: {ex.Message}");
-            }
+            image?.Dispose();
+            return;
+        }
+
+        Color accent = icon == ToolTipIcon.Error ? Color.Firebrick : Color.OrangeRed;
+        try
+        {
+            OverlayToast.Display(title, text, accent, image: image, imageSize: Math.Clamp(_settings.AlertImageSize, 64, 1600));
+        }
+        catch (Exception ex)
+        {
+            image?.Dispose();
+            Log.Write($"Overlay alert failed: {ex.Message}");
+            if (!balloonShown)
+                _tray.ShowBalloonTip(10_000, title, text, icon);
         }
     }
 
