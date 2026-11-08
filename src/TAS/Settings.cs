@@ -34,6 +34,11 @@ public sealed class Settings
     public string? CustomSoundPath { get; set; }
 
     /// <summary>
+    /// Also show alerts as an always-on-top popup, because Windows hides its own notifications over games and full-screen apps.
+    /// </summary>
+    public bool ShowOverlayAlerts { get; set; } = true;
+
+    /// <summary>
     /// User-defined alerts on other readings (hot spot, load, fan speed, ...), in addition to the CPU/GPU temperature limits.
     /// </summary>
     public List<AlertRule> CustomAlerts { get; set; } = new();

@@ -74,6 +74,7 @@ internal sealed class HelpForm : Form
         Bullet("Do Not Disturb is on: it's on the same page, and in the notification centre. Alerts are then delivered silently to the notification centre.");
         Bullet("Do Not Disturb turns on automatically when you're gaming, using an app full-screen or duplicating your display. Check \"Turn on do not disturb automatically\" on the Notifications settings page if you want alerts during games.");
         Bullet("TAS is turned off in the list of notification senders. After the first alert, TAS may appear in that list; make sure it's On.");
+        Paragraph("When Windows is holding notifications back (a game or full-screen app is in front, or Do Not Disturb is on), TAS shows its own pop-up in the top-right corner of the screen instead, on top of games in windowed or borderless-fullscreen mode. It doesn't take focus and clicks go through it. You can turn it off on the Settings tab. A game in true exclusive full-screen mode may still cover it: switch the game to borderless/windowed-fullscreen if you can.");
         Paragraph("Click \"Send test alert\" on the Setup tab to check. If the Setup tab says notifications are enabled but nothing appears, open the notification centre: if the test alert is there, Do Not Disturb or Focus held it back.");
 
         SubHeading("4. Keep the tray icon visible (optional)");
@@ -89,7 +90,7 @@ internal sealed class HelpForm : Form
 
         Heading("Extra features");
         Bullet("Alert sound: TAS can play a warning chime, a critical alarm (three beeps) or your own .wav file as well as the Windows notification. Use \"Test sound\" to hear it.");
-        Bullet("Custom alerts: click \"Custom alerts...\" to get an alert on any other reading, such as GPU hot spot or memory temperature, load, or a fan dropping to 0 RPM. Pick the device, the sensor, \"goes above\" or \"drops below\", and a limit. Sensors only appear once TAS has read them.");
+        Bullet("Custom alerts: click \"Custom alerts...\" to get an alert on any other reading, such as GPU hot spot or memory temperature, load, or a fan dropping to 0 RPM. Pick the device, the sensor, \"goes above\" or \"drops below\", and a limit. Sensors only appear once TAS has read them. \"View Available Alerts\" shows every sensor your hardware reports with a short explanation of each; double-click one to create an alert for it.");
         Bullet("Snooze: right-click the tray icon > Snooze alerts to pause alerts for 30 minutes, 1 hour or 2 hours (for example while gaming or benchmarking). Alerts resume by themselves, and anything still too hot alerts straight away.");
         Bullet("Temperature history: the History tab shows a graph of the last 10 minutes, 30 minutes or hour, with your limits as dashed lines, and the peak temperatures since TAS started.");
         Bullet("Show temperatures in °F: changes what TAS displays. Your limits are converted for you.");

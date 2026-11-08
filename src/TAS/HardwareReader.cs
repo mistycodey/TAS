@@ -92,8 +92,9 @@ public sealed class HardwareReader : IDisposable
 
         float? clock = isGpu
             ? Named(sensors, SensorType.Clock, "GPU Core")
+            // Intel names these "CPU Core #1", AMD "Core #1" and hybrid Intel "P-Core #1" / "E-Core #1".
             : Average(sensors.Where(s => s.SensorType == SensorType.Clock
-                                         && s.Name.StartsWith("Core #", StringComparison.OrdinalIgnoreCase)));
+                                         && s.Name.Contains("Core #", StringComparison.OrdinalIgnoreCase)));
 
         // Sensors that need the PawnIO driver report 0 when it's missing.
         List<ISensor> powerSensors = sensors.Where(s => s.SensorType == SensorType.Power && s.Value > 0).ToList();

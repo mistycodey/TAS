@@ -21,9 +21,11 @@ public sealed class MainForm : Form
     private readonly Button _testSound = new() { Text = "Test sound", AutoSize = true };
     private readonly Label _soundFile = new() { AutoSize = true, ForeColor = SystemColors.GrayText, MaximumSize = new Size(Ui.Scale(300), 0) };
     private readonly CheckBox _startup = new() { Text = "Start TAS when I sign in to Windows", AutoSize = true, Enabled = false };
+    private readonly CheckBox _overlay = new() { Text = "Show a TAS pop-up when Windows hides notifications", AutoSize = true };
     private readonly CheckBox _fahrenheit = new() { Text = "Show temperatures in °F", AutoSize = true };
     private readonly CheckBox _csv = new() { Text = "Log readings to a CSV file", AutoSize = true };
     private readonly Button _rules = new() { Text = "Manage custom alerts...", AutoSize = true };
+    private readonly Button _viewAvailable = new() { Text = "View Available Alerts", AutoSize = true };
     private readonly Label _rulesSummary = new() { AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(Ui.Scale(3), Ui.Scale(8), 0, 0) };
     private readonly ToolTip _tips = new();
     private readonly System.Windows.Forms.Timer _setupRefresh = new() { Interval = 3000 };
@@ -78,6 +80,7 @@ public sealed class MainForm : Form
 
         _startup.Checked = false;
         _fahrenheit.Checked = settings.UseFahrenheit;
+        _overlay.Checked = settings.ShowOverlayAlerts;
         _csv.Checked = settings.LogReadingsToCsv;
         UpdateRulesSummary();
         _tips.SetToolTip(_startup, "Adds a Windows scheduled task that starts TAS in the tray at sign-in without a UAC prompt.");
@@ -156,7 +159,9 @@ public sealed class MainForm : Form
             DisplayOptionsChanged?.Invoke();
         };
         _csv.CheckedChanged += (_, _) => Apply(() => _settings.LogReadingsToCsv = _csv.Checked);
+        _overlay.CheckedChanged += (_, _) => Apply(() => _settings.ShowOverlayAlerts = _overlay.Checked);
         _rules.Click += (_, _) => OpenRules();
+        _viewAvailable.Click += (_, _) => OpenAvailableAlerts();
 
         _setup.InstallPawnIoRequested += () => InstallPawnIoRequested?.Invoke();
         _setup.TestAlertRequested += () => TestAlertRequested?.Invoke();
@@ -222,6 +227,7 @@ public sealed class MainForm : Form
         AddNote(custom, "Get an alert for any other reading, such as GPU hot spot, memory temperature, load, or a fan stopping.");
         var customRow = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty };
         customRow.Controls.Add(_rules);
+        customRow.Controls.Add(_viewAvailable);
         customRow.Controls.Add(_rulesSummary);
         custom.Controls.Add(customRow);
         custom.SetColumnSpan(customRow, 3);
@@ -235,6 +241,7 @@ public sealed class MainForm : Form
     {
         var general = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(Ui.Scale(6)) };
         general.Controls.Add(Option(_startup, "TAS starts quietly in the tray, with administrator rights and no UAC prompt. Untick to remove it."));
+        general.Controls.Add(Option(_overlay, "Windows hides its own notifications during games, full-screen apps and Do Not Disturb. In those cases TAS shows its own small alert in the top-right corner for 10 seconds. It never takes focus and clicks go through it. \"Send test alert\" always shows it."));
         general.Controls.Add(Option(_fahrenheit, "Only changes what TAS shows. Your limits are converted for you."));
 
         var openFolder = new Button { Text = "Open data folder", AutoSize = true, Margin = new Padding(Ui.Scale(18), Ui.Scale(2), 0, Ui.Scale(6)) };
@@ -507,6 +514,22 @@ public sealed class MainForm : Form
     {
         using (var dialog = new RulesForm(_settings, _snapshot))
             dialog.ShowDialog(this);
+
+        UpdateRulesSummary();
+        CustomAlertsChanged?.Invoke();
+    }
+
+    private void OpenAvailableAlerts()
+    {
+        bool changed;
+        using (var dialog = new AvailableAlertsForm(_settings, _snapshot))
+        {
+            dialog.ShowDialog(this);
+            changed = dialog.AlertsChanged;
+        }
+
+        if (!changed)
+            return;
 
         UpdateRulesSummary();
         CustomAlertsChanged?.Invoke();

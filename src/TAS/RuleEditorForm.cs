@@ -17,6 +17,13 @@ internal sealed class RuleEditorForm : Form
     private readonly ComboBox _comparison = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = Ui.Scale(280) };
     private readonly NumericUpDown _limit = new() { DecimalPlaces = 1, Minimum = -1_000_000, Maximum = 1_000_000, Width = Ui.Scale(100), TextAlign = HorizontalAlignment.Right };
     private readonly NumericUpDown _hysteresis = new() { DecimalPlaces = 1, Minimum = 0, Maximum = 1_000_000, Width = Ui.Scale(100), TextAlign = HorizontalAlignment.Right };
+    private readonly Label _sensorInfo = new()
+    {
+        AutoSize = true,
+        ForeColor = SystemColors.GrayText,
+        MaximumSize = new Size(Ui.Scale(380), 0),
+        Margin = new Padding(Ui.Scale(3), 0, 0, Ui.Scale(6)),
+    };
     private readonly Label _limitUnit = Ui.Caption("");
     private readonly Label _hysteresisUnit = Ui.Caption("");
 
@@ -49,6 +56,9 @@ internal sealed class RuleEditorForm : Form
         var table = new TableLayoutPanel { ColumnCount = 3, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(Ui.Scale(12)) };
         AddRow(table, "Device", _device, null);
         AddRow(table, "Sensor", _sensor, null);
+        table.Controls.Add(new Label { AutoSize = true });
+        table.Controls.Add(_sensorInfo);
+        table.SetColumnSpan(_sensorInfo, 2);
         AddRow(table, "Alert when it", _comparison, null);
         AddRow(table, "Limit", _limit, _limitUnit);
         AddRow(table, "Alert again after recovering by", _hysteresis, _hysteresisUnit);
@@ -119,7 +129,11 @@ internal sealed class RuleEditorForm : Form
 
     private void UpdateUnits()
     {
-        string type = (_sensor.SelectedItem as SensorChoice)?.Type ?? "Temperature";
+        var choice = _sensor.SelectedItem as SensorChoice;
+        string type = choice?.Type ?? "Temperature";
+        _sensorInfo.Text = choice is null
+            ? ""
+            : SensorDescriptions.Describe(choice.Name, choice.Type, _device.SelectedIndex == (int)AlertDevice.Gpu);
         string unit = SensorInfo.UnitFor(type);
         _limitUnit.Text = unit;
         _hysteresisUnit.Text = unit;

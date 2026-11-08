@@ -64,7 +64,7 @@ public sealed class TrayApp : ApplicationContext
         _window.DisplayOptionsChanged += RefreshDisplay;
         _window.TestAlertRequested += () =>
         {
-            ShowToast("TAS test alert", "If you can see this, temperature alerts will appear here.", ToolTipIcon.Warning);
+            ShowToast("TAS test alert", "If you can see this, temperature alerts will appear here.", ToolTipIcon.Warning, forceOverlay: true);
             AlertSounds.Play(_settings);
             _window.ShowStatus($"Test alert sent at {DateTime.Now:T}. If nothing popped up, check the notification centre and see Help.");
         };
@@ -295,10 +295,25 @@ public sealed class TrayApp : ApplicationContext
         _window.Activate();
     }
 
-    private void ShowToast(string title, string text, ToolTipIcon icon)
+    // The Windows notification is always sent (it also lands in the notification centre). TAS's own pop-up is only added
+    // when Windows is holding notifications back, e.g. during a game, so normally there's just one alert on screen.
+    private void ShowToast(string title, string text, ToolTipIcon icon, bool forceOverlay = false)
     {
         Log.Write($"Notification: {title} - {text}");
         _tray.ShowBalloonTip(10_000, title, text, icon);
+
+        if (_settings.ShowOverlayAlerts && (forceOverlay || SetupChecks.WindowsHoldsToasts()))
+        {
+            Color accent = icon == ToolTipIcon.Error ? Color.Firebrick : Color.OrangeRed;
+            try
+            {
+                OverlayToast.Display(title, text, accent);
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"Overlay alert failed: {ex.Message}");
+            }
+        }
     }
 
     private void SetIcon(bool hot)
@@ -346,6 +361,7 @@ public sealed class TrayApp : ApplicationContext
     protected override void ExitThreadCore()
     {
         _cts.Cancel();
+        OverlayToast.CloseAll();
         _tray.Visible = false;
         _tray.Dispose();
         _window.Dispose();

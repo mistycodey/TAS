@@ -28,6 +28,28 @@ public static class SetupChecks
         };
     }
 
+    /// <summary>
+    /// True when Windows won't pop up a notification right now: notifications or Do Not Disturb are off,
+    /// or a game, full-screen app or presentation is in front.
+    /// </summary>
+    public static bool WindowsHoldsToasts()
+    {
+        try
+        {
+            if (ReadDword(@"Software\Microsoft\Windows\CurrentVersion\PushNotifications", "ToastEnabled") == 0
+                || ReadDword(@"Software\Microsoft\Windows\CurrentVersion\Notifications\Settings", "NOC_GLOBAL_SETTING_TOASTS_ENABLED") == 0)
+                return true;
+
+            return SHQueryUserNotificationState(out NotificationState state) == 0
+                   && state is NotificationState.Busy or NotificationState.RunningFullScreen
+                       or NotificationState.PresentationMode or NotificationState.QuietTime;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     public static CheckResult Notifications()
     {
         if (ReadDword(@"Software\Microsoft\Windows\CurrentVersion\PushNotifications", "ToastEnabled") == 0)
